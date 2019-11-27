@@ -140,6 +140,7 @@ ovrResult CompositorBase::WaitToBeginFrame(ovrSession session, long long frameIn
 ovrResult CompositorBase::BeginFrame(ovrSession session, long long frameIndex)
 {
 	MICROPROFILE_SCOPE(BeginFrame);
+	m_CurrentSession = session;
 
 	// Lock the frame mutex only if we don't already own it
 	if (!m_FrameLock)

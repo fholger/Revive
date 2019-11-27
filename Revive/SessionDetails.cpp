@@ -9,6 +9,7 @@
 
 SessionDetails::HackInfo SessionDetails::m_known_hacks[] = {
 	{ "Stormland.exe", nullptr, HACK_SAME_FOV_FOR_BOTH_EYES, true },
+	{ "Stormland.exe", nullptr, HACK_RENDER_HIDDEN_AREA_MESH_TO_DEPTH, true },
 	{ "ultrawings.exe", nullptr, HACK_FAKE_PRODUCT_NAME, true },
 	{ "AirMech.exe", nullptr, HACK_SLEEP_IN_SESSION_STATUS, true },
 	{ nullptr, "lighthouse", HACK_SPOOF_SENSORS, false },

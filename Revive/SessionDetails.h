@@ -54,6 +54,8 @@ public:
 		// Hack: Use the same (mirrored) FOV for both eyes.
 		// Stormland renders certain effects at the wrong depth if the eye FOVs do not match.
 		HACK_SAME_FOV_FOR_BOTH_EYES,
+
+		HACK_RENDER_HIDDEN_AREA_MESH_TO_DEPTH,
 	};
 
 	SessionDetails();

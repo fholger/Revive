@@ -5,11 +5,12 @@
 #include "TextureD3D.h"
 
 #include <d3d11.h>
+#include "SessionDetails.h"
 
-OVR_PUBLIC_FUNCTION(ovrResult) ovr_CreateTextureSwapChainDX(ovrSession session,
-                                                            IUnknown* d3dPtr,
-                                                            const ovrTextureSwapChainDesc* desc,
-                                                            ovrTextureSwapChain* out_TextureSwapChain)
+OVR_PUBLIC_FUNCTION( ovrResult ) ovr_CreateTextureSwapChainDX(ovrSession session,
+                                                              IUnknown* d3dPtr,
+                                                              const ovrTextureSwapChainDesc* desc,
+                                                              ovrTextureSwapChain* out_TextureSwapChain)
 {
 	REV_TRACE(ovr_CreateTextureSwapChainDX);
 
@@ -24,6 +25,11 @@ OVR_PUBLIC_FUNCTION(ovrResult) ovr_CreateTextureSwapChainDX(ovrSession session,
 		session->Compositor.reset(CompositorD3D::Create(d3dPtr));
 		if (!session->Compositor)
 			return ovrError_RuntimeException;
+
+		if (session->Details->UseHack(SessionDetails::HACK_RENDER_HIDDEN_AREA_MESH_TO_DEPTH))
+		{
+			((CompositorD3D*)session->Compositor.get())->SetupRenderHiddenAreaMeshToDepthHack();
+		}
 	}
 
 	if (session->Compositor->GetAPI() != vr::TextureType_DirectX)
@@ -78,6 +84,11 @@ OVR_PUBLIC_FUNCTION(ovrResult) ovr_CreateMirrorTextureDX(ovrSession session,
 		session->Compositor.reset(CompositorD3D::Create(d3dPtr));
 		if (!session->Compositor)
 			return ovrError_RuntimeException;
+
+		if (session->Details->UseHack(SessionDetails::HACK_RENDER_HIDDEN_AREA_MESH_TO_DEPTH))
+		{
+			((CompositorD3D*)session->Compositor.get())->SetupRenderHiddenAreaMeshToDepthHack();
+		}
 	}
 
 	if (session->Compositor->GetAPI() != vr::TextureType_DirectX)
