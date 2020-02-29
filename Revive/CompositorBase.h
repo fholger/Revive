@@ -33,6 +33,7 @@ public:
 	void SetMirrorTexture(ovrMirrorTexture mirrorTexture);
 	static vr::VRTextureBounds_t FovPortToTextureBounds(ovrFovPort eyeFov, ovrFovPort fov);
 
+	ovrSession m_CurrentSession;
 protected:
 	unsigned int m_ChainCount;
 	ovrMirrorTexture m_MirrorTexture;

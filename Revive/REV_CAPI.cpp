@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <thread>
 #include <assert.h>
+#include <fstream>
 
 #define REV_DEFAULT_TIMEOUT 10000
 

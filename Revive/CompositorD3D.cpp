@@ -1,5 +1,6 @@
 #include "CompositorD3D.h"
 #include "TextureD3D.h"
+#include "Session.h"
 
 #include <openvr.h>
 #include <d3d11.h>
@@ -9,6 +10,25 @@
 #include "VertexShader.hlsl.h"
 #include "MirrorShader.hlsl.h"
 #include "CompositorShader.hlsl.h"
+#include "HiddenAreaMeshVertexShader.hlsl.h"
+#include "MinHook.h"
+#include <fstream>
+
+CompositorD3D* pCompositor = nullptr;
+
+typedef HRESULT(__stdcall* D3D11_ClearDepthStencilView_t)(ID3D11DeviceContext* context, ID3D11DepthStencilView* pDepthStencilView, UINT ClearFlags, FLOAT Depth, UINT8 Stencil);
+D3D11_ClearDepthStencilView_t pD3D11_ClearDepthStencilView = NULL;
+
+HRESULT __stdcall D3D11_ClearDepthStencilView_Hook(ID3D11DeviceContext* context, ID3D11DepthStencilView* pDepthStencilView, UINT ClearFlags, FLOAT Depth, UINT8 Stencil)
+{
+	HRESULT ret = pD3D11_ClearDepthStencilView(context, pDepthStencilView, ClearFlags, Depth, Stencil);	
+	if (Depth == 0)
+	{
+		pCompositor->RenderHiddenAreaMeshToDepth();
+	}
+
+	return ret;
+}
 
 struct Vertex
 {
@@ -160,6 +180,85 @@ void CompositorD3D::RenderMirrorTexture(ovrMirrorTexture mirrorTexture)
 	m_pContext->RSSetState(ras_state);
 	m_pContext->OMSetBlendState(blend_state.Get(), blend_factor, sample_mask);
 	m_pContext->IASetPrimitiveTopology(topology);
+}
+
+void CompositorD3D::SetupRenderHiddenAreaMeshToDepthHack()
+{
+	m_pDevice->CreateVertexShader(g_HiddenAreaMeshVertexShader, sizeof(g_HiddenAreaMeshVertexShader), NULL, m_HiddenAreaMeshVertexShader.GetAddressOf());
+
+	// Create the vertex buffer.
+	vr::HiddenAreaMesh_t hamRight = vr::VRSystem()->GetHiddenAreaMesh(vr::Eye_Right);
+	vr::HiddenAreaMesh_t hamLeft = vr::VRSystem()->GetHiddenAreaMesh(vr::Eye_Left);
+	std::vector<vr::HmdVector2_t> combinedHam (3 * (hamRight.unTriangleCount + hamLeft.unTriangleCount));
+	memcpy(&combinedHam[0], hamRight.pVertexData, sizeof(vr::HmdVector2_t) * 3 * hamRight.unTriangleCount);
+	memcpy(&combinedHam[3 * hamRight.unTriangleCount], hamLeft.pVertexData, sizeof(vr::HmdVector2_t) * 3 * hamLeft.unTriangleCount);
+	for (unsigned int i = 0; i < 3 * (hamRight.unTriangleCount + hamLeft.unTriangleCount); ++i)
+	{
+		// coordinates from SteamVR are in (0, 1) range, scale y to (-1, 1)
+		combinedHam[i].v[1] = combinedHam[i].v[1] * 2 - 1;
+		if (i >= 3 * hamRight.unTriangleCount)
+		{
+			// left-shift the left eye vertices so that they render to the left part of the Stormland render texture
+			combinedHam[i].v[0] -= 1;
+		}
+	}
+	m_HiddenAreaMeshNumVertices = combinedHam.size();
+
+	D3D11_BUFFER_DESC bufferDesc;
+	bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	bufferDesc.ByteWidth = sizeof(vr::HmdVector2_t) * combinedHam.size();
+	bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc.CPUAccessFlags = 0;
+	bufferDesc.MiscFlags = 0;
+	D3D11_SUBRESOURCE_DATA data;
+	data.pSysMem = combinedHam.data();
+	m_pDevice->CreateBuffer(&bufferDesc, &data, m_HiddenAreaMeshVertexBuffer.GetAddressOf());
+
+	// Create the input layout.
+	D3D11_INPUT_ELEMENT_DESC layout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
+		D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+	m_pDevice->CreateInputLayout(layout, 1, g_HiddenAreaMeshVertexShader, sizeof(g_HiddenAreaMeshVertexShader), m_HiddenAreaMeshInputLayout.GetAddressOf());
+
+	// Create the rasterizer state
+	D3D11_RASTERIZER_DESC rasterizerDesc;
+	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+	rasterizerDesc.CullMode = D3D11_CULL_NONE;
+	rasterizerDesc.DepthBias = 0;
+	rasterizerDesc.DepthBiasClamp = 0;
+	rasterizerDesc.DepthClipEnable = false;
+	rasterizerDesc.ScissorEnable = false;
+	rasterizerDesc.MultisampleEnable = false;
+	rasterizerDesc.AntialiasedLineEnable = false;
+	m_pDevice->CreateRasterizerState(&rasterizerDesc, m_HiddenAreaMeshRasterizerState.GetAddressOf());
+
+	// hook ClearDepthStencil
+	LPVOID pTarget;
+	MH_CreateHookVirtualEx(m_pContext.Get(), 53, &D3D11_ClearDepthStencilView_Hook, (void**)&pD3D11_ClearDepthStencilView, &pTarget);
+	MH_EnableHook(pTarget);
+	pCompositor = this;
+}
+
+void CompositorD3D::RenderHiddenAreaMeshToDepth()
+{
+	ID3D11RasterizerState* currentState;
+	m_pContext->RSGetState(&currentState);
+
+	m_pContext->VSSetShader(m_HiddenAreaMeshVertexShader.Get(), NULL, 0);
+	m_pContext->PSSetShader(NULL, NULL, 0);
+	m_pContext->RSSetState(m_HiddenAreaMeshRasterizerState.Get());
+	
+	// Set and draw the vertices
+	UINT stride = sizeof(vr::HmdVector2_t);
+	UINT offset = 0;
+	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pContext->IASetInputLayout(m_HiddenAreaMeshInputLayout.Get());
+	m_pContext->IASetVertexBuffers(0, 1, m_HiddenAreaMeshVertexBuffer.GetAddressOf(), &stride, &offset);
+	m_pContext->Draw(m_HiddenAreaMeshNumVertices, 0);
+
+	m_pContext->RSSetState(currentState);
 }
 
 void CompositorD3D::RenderTextureSwapChain(vr::EVREye eye, TextureBase* src, TextureBase* dst, ovrRecti viewport, vr::VRTextureBounds_t bounds, vr::HmdVector4_t quad)

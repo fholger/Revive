@@ -142,6 +142,7 @@ ovrResult CompositorBase::WaitToBeginFrame(ovrSession session, long long frameIn
 ovrResult CompositorBase::BeginFrame(ovrSession session, long long frameIndex)
 {
 	MICROPROFILE_SCOPE(BeginFrame);
+	m_CurrentSession = session;
 
 	// Reset the event in the frame ring buffer
 	ResetEvent(m_FrameEvents[frameIndex % MAX_QUEUE_AHEAD]);

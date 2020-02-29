@@ -22,6 +22,9 @@ public:
 	virtual void RenderTextureSwapChain(vr::EVREye eye, TextureBase* src, TextureBase* dst, ovrRecti viewport, vr::VRTextureBounds_t bounds, vr::HmdVector4_t quad);
 	virtual void RenderMirrorTexture(ovrMirrorTexture mirrorTexture);
 
+	void SetupRenderHiddenAreaMeshToDepthHack();
+	void RenderHiddenAreaMeshToDepth();
+
 protected:
 	// DirectX 11
 	Microsoft::WRL::ComPtr<ID3D11Device> m_pDevice;
@@ -44,4 +47,11 @@ protected:
 
 	// Mirror
 	ID3D11ShaderResourceView* m_pMirror[ovrEye_Count];
+
+	// Hidden area mesh resources
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_HiddenAreaMeshVertexBuffer;
+	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_HiddenAreaMeshInputLayout;
+	Microsoft::WRL::ComPtr<ID3D11VertexShader> m_HiddenAreaMeshVertexShader;
+	Microsoft::WRL::ComPtr<ID3D11RasterizerState> m_HiddenAreaMeshRasterizerState;
+	unsigned int m_HiddenAreaMeshNumVertices;
 };
